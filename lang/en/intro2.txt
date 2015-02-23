@@ -1,0 +1,1 @@
+<p>This editor is able to modify and create queries.</p>

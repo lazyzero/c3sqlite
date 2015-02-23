@@ -1,0 +1,9 @@
+<p>
+Palceholders in the format: @@PLACEHOLDER@@ can be used in queries.<br/>
+Then they must be indicated when using the syntax plugin by adding &replace={@@PLACEHOLDER@@=value}.<br/>
+Multipel placeholders can be truncated by |, e.g. &replace={@@PLACEHOLDER1@@=value1|@@PLACEHOLDER2@@=value2}
+</p>
+
+<p>
+You can use SQL syntax as specified in the sqlite documentation. Not allowed keywords are:
+</p>

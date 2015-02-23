@@ -1,0 +1,16 @@
+div.c3 {
+    padding: 0.8em;
+    color: black;
+}
+
+.legend {
+    color: black;
+}
+
+div.c3 g.tick text {
+  color: black;
+}
+
+.c3 svg {
+  color: black;
+}

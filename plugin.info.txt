@@ -1,0 +1,7 @@
+base   c3sqlite
+author Christian Moll
+email  christian@chrmoll.de
+date   2015-02-23
+name   C3 sqlite plugin
+desc   A plugin to draw C3 charts, tables and exprt XLS files using predefined SQLite queries.
+url    http://chrmoll.de
