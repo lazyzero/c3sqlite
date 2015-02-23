@@ -1,15 +1,15 @@
 <?php
 /**
- * DokuWiki Plugin query (Syntax Component)
+ * DokuWiki Plugin C3SQLite (Syntax Component)
  *
  * @license GPL 2 http://www.gnu.org/licenses/gpl-2.0.html
- * @author  Christian Moll <christian.moll@tudor.lu>
+ * @author  Christian Moll <christian@chrmoll.de>
  */
 
 // must be run within Dokuwiki
 if (!defined('DOKU_INC')) die();
 
-class syntax_plugin_query_query extends DokuWiki_Syntax_Plugin {
+class syntax_plugin_c3sqlite_c3sqlite extends DokuWiki_Syntax_Plugin {
     /**
      * @return string Syntax mode type
      */
@@ -35,16 +35,17 @@ class syntax_plugin_query_query extends DokuWiki_Syntax_Plugin {
      * @param string $mode Parser mode
      */
     public function connectTo($mode) {
-        $this->Lexer->addSpecialPattern('<QUERY.+?</QUERY>',$mode,'plugin_query_query');
-//        $this->Lexer->addEntryPattern('<FIXME>',$mode,'plugin_query_query');
+        $this->Lexer->addSpecialPattern('<C3SQLITE.+?</C3SQLITE>',$mode,'plugin_c3sqlite_c3sqlite');
+        $this->Lexer->addSpecialPattern('<c3sqlite.+?</c3sqlite>',$mode,'plugin_c3sqlite_c3sqlite');
+//        $this->Lexer->addEntryPattern('<FIXME>',$mode,'plugin_c3sqlite_c3sqlite');
     }
 
 //    public function postConnect() {
-      // $this->Lexer->addExitPattern('</QUERY>','plugin_query_query');
+      // $this->Lexer->addExitPattern('</C3SQLITE>','plugin_c3sqlite_c3sqlite');
 //    }
 
     /**
-     * Handle matches of the query syntax
+     * Handle matches of the c3sqlite syntax
      *
      * @param string $match The match of the syntax
      * @param int    $state The state of the handler
@@ -53,7 +54,7 @@ class syntax_plugin_query_query extends DokuWiki_Syntax_Plugin {
      * @return array Data for the renderer
      */
     public function handle($match, $state, $pos, Doku_Handler &$handler){
-        $match = substr(trim($match), 6, -8);
+        $match = substr(trim($match), 9, -11);
         $data = array();
         
         list($opts, $c3data) = explode('>', $match);
@@ -73,7 +74,7 @@ class syntax_plugin_query_query extends DokuWiki_Syntax_Plugin {
 	    if (preg_match('/^data/', $opt)) {
 		$opt = explode('=', $opt);
 		$opt = explode(':', $opt[1]);
-		$data['study'] = $opt[0]; 
+		$data['dbname'] = $opt[0]; 
 		$data['query'] = $opt[1]; 
 	    } else if (preg_match('/^renderAs/', $opt)) {
 		$rend = explode('=', $opt);
@@ -122,12 +123,6 @@ class syntax_plugin_query_query extends DokuWiki_Syntax_Plugin {
 		$this->_table($result, $renderer);
 	    } else if (preg_match("/^XLS/", $renderItem)) {
 		$this->_xls($result, $data, $renderer);
-	    } else if (preg_match("/^CHART_SWAP/", $renderItem)) {
-		$c3Data = $this->_c3DataSwap($result);    
-		$this->_c3Chart($c3Data, $data, $renderer);
-	    } else if (preg_match("/^CHART_CATEGORY/", $renderItem)) {
-		$c3Data = $this->_c3Data_category($result);    
-		$this->_c3Chart($c3Data, $data, $renderer);
 	    } else if (preg_match("/^CHART/", $renderItem)) {
 		$c3Data = $this->_c3Data($result);
 		$this->_c3Chart($c3Data, $data, $renderer);
@@ -137,102 +132,33 @@ class syntax_plugin_query_query extends DokuWiki_Syntax_Plugin {
 	    }
 	}
 	$renderer->doc .= "</div>";
-       
-        
         return true;
     }
     
-    function _c3DataSwap($result) {
-	$c3Data = array();
-	$columns = array();
-	
-	$cols = count(pg_fetch_array($result, 0));
-	for ($i = 0; $i < $cols/2; $i++) {
-	    $columns[$i][] = "'".pg_field_name($result, $i)."'";
-	}
-	
-	while ($row = pg_fetch_row($result)) {
-	    for ($i = 0; $i < $cols/2; $i++) {
-	    	$columns[$i][] = $row[$i];
-	    }
-	}
-	$c3Data['data']['columns'] = $columns;
-	
-	return $c3Data;
-    }
-    
+   
     function _c3Data($result) {
 	$c3Data = array();
 	$rows = array();
+	$data = array();
 	
-	while ($row = pg_fetch_row($result)) {
-	    $row[0] = "'".$row[0]."'";
-	    $rows[] = $row;
+	foreach($result as $row) {
+	    foreach($row as $key => $value) {
+		$rows[$key][]= $value; 
+	    }
 	}
 	
-	$c3Data['data']['columns'] = $rows;
+	foreach($rows as $key => $row) {
+	    $d = array();
+	    $d[0] = "'".$key."'";
+	    foreach($rows[$key] as $col) {
+		$d[] = $col;
+	    }
+	    $data[] = $d;
+	}
+	
+	$c3Data['data']['columns'] = $data;
 	return $c3Data;
-    }
-    
-    function _c3Data_category($result) {
-	$c3Data = array();
-	$rows = array();
-	$category =array();
-	
-	while ($row = pg_fetch_row($result)) {
-	    list($rows, $categories) = $this->categorisedData($rows, $row, $categories);
-	}
-
-	$c3Data['axis']['x']['type'] = "'category'";
-	$c3Data['axis']['x']['categories'] = $categories;
-	
-	$c3Data['data']['columns'] = $rows;
-	return $c3Data;
-    }
-    
-    function categorisedData($rows, $row, $categories) {
-	$isIn = 0;
-	//if first columns already in categories array
-	if (!empty($categories)) {
-	   if (!in_array("'".$row[0]."'", $categories)) {
-	    $categories[] = "'".$row[0]."'";
-	    }
-	} else {
-	    $categories[] = "'".$row[0]."'";
-	}
-	//remove first column
-	for ($i = 1; $i < sizeof($row); $i++) {
-	    $row_new[$i-1] = $row[$i];
-	}
-	//convert first column to string
-	$row_new[0] = "'".$row_new[0]."'";
-	
-	//check if first column already as lable in data
-	if (empty($rows)) {
-	    $rows[] = $row_new;
-	} else {
-	    $isIn = 0;
-	    $index = 0;
-	    foreach ($rows as $line) {
-		if ($line[0] == $row_new[0]) {
- 		    $line[] = $row_new[1];
-		    $rows[$index] = $line;
-		    //var_dump($rows[$index]);var_dump($line[0]);echo '<br>';
-		    $isIn = 1;
-		}
-		$index++;
-	    }
-	    
-	    if ($isIn == 0) {
-		//var_dump( $row_new); echo '<br>';
-		$rows[] = $row_new;
-	    }
-	}
-	
-	
-        
-	return array($rows, $categories);
-    }
+    }  
     
     function _c3Chart($c3data, $data, $renderer) {
 	$opts = $data['c3opts'];
@@ -272,30 +198,27 @@ class syntax_plugin_query_query extends DokuWiki_Syntax_Plugin {
     }
     
     function _table($result, $renderer) {
-	if (pg_num_rows($result) > 0) {
+	
+	if (!empty($result)) {
 	    $renderer->doc .= "<table class=\"inline\">";
-	    $renderer->doc .= "<tbody><tr class=\"row0\">";
 	    
-	    $cols = count(pg_fetch_array($result, 0));
-	    for ($i = 0; $i < $cols/2; $i++) {
-		$renderer->doc .= "<th class=\"col$i\">".pg_field_name($result, $i)."</th>";
+	    $ths = array_keys($result[0]);
+	    $renderer->doc .= "<tr>";
+	    foreach($ths as $th) {
+		$renderer->doc .= "<th>".hsc($th)."</th>";
 	    }
 	    $renderer->doc .= "</tr>";
-	    $i=1;
-	    while ($row = pg_fetch_row($result)) {
-		$renderer->doc .= "<tr class=\"row$i\">\n";
-		$j=0;
-		foreach($row as $value) {
-		    if (preg_match('/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}/i',$value)) {
-			$value = '<a class="mail" title="'.$value.'" href="mailto:'.$value.'">'.$value.'</a>';
-		    }
-		    $renderer->doc .= "<td class=\"col$j\">$value </td>\n";
+	   
+	    foreach($result as $row) {
+		$renderer->doc .= "<tr>";
+		$tds = array_values($row);
+		foreach($tds as $td) {
+		    $renderer->doc .= "<td>".hsc($td)."</td>";
 		}
-		$renderer->doc .= "</tr>\n";
-		$i++;
+		$renderer->doc .= "</tr>";
 	    }
-	    
-	    $renderer->doc .= "</tbody></table>";
+	    $renderer->doc .= "</table>";
+	
 	} else {
 	    $renderer->doc .= "<b>".$this->getLang('nodata')."</b>";
 	}
@@ -305,20 +228,23 @@ class syntax_plugin_query_query extends DokuWiki_Syntax_Plugin {
     function _xls($result, $data, $renderer, $altLabel=false) {
 	global $conf;
 	$text ='';
-	if (pg_num_rows($result) > 0) {
-	    $cols = count(pg_fetch_array($result, 0));
-	    for ($i = 0; $i < $cols/2; $i++) {
-		$text .= "\"".pg_field_name($result, $i)."\""."\t";
+	if (!empty($result)) {
+	    $ths = array_keys($result[0]);
+	    foreach($ths as $th) {
+		$text .= "\"".$th."\""."\t";
 	    }
+	    
 	    $text .= "\n";
-	    while ($row = pg_fetch_row($result)) {
-		foreach($row as $value) {
-		    $text .= "\"$value\"\t";
+	    
+	    foreach($result as $row) {
+		$tds = array_values($row);
+		foreach($tds as $td) {
+		    $text .= "\"$td\"\t";
 		}
 		$text .= "\n";
 	    }
 	    
-	    $saveto = strtolower(DOKU_INC.$conf['savedir'].'/media/'.$this->getConf('xlsfolder').'/'.$data['study'].'/'.$data['query'].'.xls');
+	    $saveto = strtolower(DOKU_INC.$conf['savedir'].'/media/'.$this->getConf('xlsfolder').'/'.$data['dbname'].'/'.$data['query'].'.xls');
 	    //var_dump($saveto);
 	    
 	    io_saveFile($saveto, $text);
@@ -329,7 +255,7 @@ class syntax_plugin_query_query extends DokuWiki_Syntax_Plugin {
 	    $link['suf']    = '';
 	    $link['more']   = '';
 	    $link['class']  = 'media';
-	    $link['url'] = ml(str_replace('/',':',$this->getConf('xlsfolder').':'.$data['study'].':'.$data['query'].'.xls'));
+	    $link['url'] = ml(str_replace('/',':',$this->getConf('xlsfolder').':'.$data['dbname'].':'.$data['query'].'.xls'));
 	    $link['name']   = $altLabel?$this->getLang("alternativeLabel"):strtolower($data['query'].'.xls');
 	    $link['title']  = $renderer->_xmlEntities($link['url']);
 	    if($conf['relnofollow']) $link['more'] .= ' rel="nofollow"';
@@ -342,15 +268,9 @@ class syntax_plugin_query_query extends DokuWiki_Syntax_Plugin {
         } 
     }
     
-    
     function _connect($data) {
-	$host = $this->getConf('host');
-	$port = $this->getConf('port');
-	$dbname = $this->getConf('dbname');
-	$dbuser = $this->getConf('dbuser');
-	$dbpassword = $this->getConf('dbpassword');
-		
-	$queryFile = DOKU_INC.$this->getConf('querypath').'/'.$data['study'].'/'.$data['query'].'.txt';;
+	
+	$queryFile = DOKU_INC.$this->getConf('querypath').'/'.$data['dbname'].'/'.$data['query'].'.txt';;
 	$query = io_readFile($queryFile);
 	
 	if (!empty($data['replace'])) {
@@ -360,13 +280,11 @@ class syntax_plugin_query_query extends DokuWiki_Syntax_Plugin {
 	}
 	//var_dump($query);
 	
-	$dbconnection = pg_connect("host=".$host." port=".$port." dbname=".$dbname." user=".$dbuser." password=".$dbpassword);
-	if (!$dbconnection) {
-	    msg($this->getLang('connectionfail'),-1);
-	    exit;
-	}
-	
-	$result = pg_query($dbconnection, $query);
+	$DBI = plugin_load('helper', 'sqlite');
+	if(!$DBI->init($data['dbname'], '')) return;
+	$res = $DBI->query("$query;");
+        if($res === false) return;
+        $result = $DBI->res2arr($res);
 	
 	if (!$result) {
 	    msg($this->getLang('queryfail'),-1);

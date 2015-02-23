@@ -78,10 +78,6 @@ class admin_plugin_c3sqlite extends DokuWiki_Admin_Plugin {
 	$counter = 0;
 	
 	if (!$auth) return false;
-
-//         if (!is_array($selected) || empty($selected)) return false;
-//         $selected = array_keys($selected);
-
     }
 
     function _newTemplate() {
@@ -96,12 +92,13 @@ class admin_plugin_c3sqlite extends DokuWiki_Admin_Plugin {
 	
 	if(!$this->_checkQuery($text)) return;
 	
-        if (isset($_REQUEST['survey'])) {
+        if (isset($_REQUEST['dbname'])) {
+	    $dbName = $_REQUEST['dbname'];
 	    $queryName = $_REQUEST['newname'];
 	    
 	    $queryName = str_replace(' ', '', strtolower($queryName));
 	    $queryFolder = DOKU_INC.$this->getConf('querypath');
-	    $queryFileName = $queryFolder.'/'.$queryName.'.txt';
+	    $queryFileName = $queryFolder.'/'.$dbName.'/'.$queryName.'.txt';
 	    io_saveFile($queryFileName, $text);
 	}      
     }
@@ -119,11 +116,12 @@ class admin_plugin_c3sqlite extends DokuWiki_Admin_Plugin {
 	
 	if(!$this->_checkQuery($text)) return;
 	
-        if (isset($_REQUEST['survey'])) {
+        if (isset($_REQUEST['dbname'])) {
+	    $dbName = $_REQUEST['dbname'];
 	    $queryName = $_REQUEST['queryname'];
 	    $queryName = str_replace(' ', '', strtolower($queryName));
 	    $queryFolder = DOKU_INC.$this->getConf('querypath');
-	    $queryFileName = $queryFolder.'/'.$queryName.'.txt';
+	    $queryFileName = $queryFolder.'/'.$dbName.'/'.$queryName.'.txt';
 	    io_saveFile($queryFileName, $text);
 	}      
     }
@@ -164,18 +162,25 @@ class admin_plugin_c3sqlite extends DokuWiki_Admin_Plugin {
 		$queryName = $_REQUEST['queryname'];
 	    }
 	    
-	    $queryName = str_replace(' ', '', strtolower($queryName));
-	    $queryFolder = DOKU_INC.$this->getConf('querypath');
-	    $queryFileName = $queryFolder.'/'.$queryName.'.txt';
-	    
-	    $d = dir($queryFolder);
-	    while (false !== ($entry = $d->read())) {
-		if (!preg_match('/^\./', $entry)) {
-// 			var_dump($entry);
-		    $queries[] = str_replace('.txt','',$entry);
-		}
+	    $dbfiles = glob($conf['metadir'].'/*.sqlite3');
+	    foreach($dbfiles as $dbf) {
+	       $dbf = str_replace($conf['metadir'].'/', '', $dbf);
+	       $dbnames[] = str_replace('.sqlite3', '', $dbf);
 	    }
-	    $d->close();
+	    
+	    if (isset($_REQUEST['dbname'])) {
+		$dbName = $_REQUEST['dbname'];
+		$queryName = str_replace(' ', '', strtolower($queryName));
+		$queryFolder = DOKU_INC.$this->getConf('querypath').'/'.$dbName;
+		$queryFileName = $queryFolder.'/'.$queryName.'.txt';
+		$d = dir($queryFolder);
+		while (false !== ($entry = $d->read())) {
+		    if (!preg_match('/^\./', $entry)) {
+			$queries[] = str_replace('.txt','',$entry);
+		    }
+		}
+		$d->close();
+	    }
 	    
 	    echo($this->locale_xhtml('list'));
 	    
@@ -188,8 +193,20 @@ class admin_plugin_c3sqlite extends DokuWiki_Admin_Plugin {
 	    ptln("<form action=\"".wl($ID)."\" method=\"post\">");
 	    formSecurityToken();
 		
-	    ptln("Select a query form the list and load it:<br>");
-		
+	    ptln("Select a database first:<br>");
+	
+	    ptln("<select name='dbname'>");
+	    foreach($dbnames as $db) {
+		if ($db == $dbName) {
+		    $selected = " selected";
+		} else {
+		    $selected = "";
+		}
+		ptln("<option".$selected.">".$db."</option>");
+	    }
+	    ptln("</select>");
+	    ptln("<input name='fn[reload]' class='button' value='select database' id='usrmgr__notify' type='submit'>");
+	
 	    ptln("<br>".$this->getLang('loadintro')."<br>");
 	    ptln("<select name='queryname'>");
 	    foreach($queries as $query) {
@@ -213,13 +230,14 @@ class admin_plugin_c3sqlite extends DokuWiki_Admin_Plugin {
 	    ptln($this->getLang('newqueryname')."</p>");
 	    
 	    ptln("<input name='do' value='admin' type='hidden'>");
-	    ptln("<input name='page' value='query' type='hidden'>");
+	    ptln("<input name='page' value='c3sqlite' type='hidden'>");
 	    
 	    if (isset($_REQUEST['fn']['test'])) {
 		$text = $_REQUEST['text'];
 		$replaceBy = $_REQUEST['replaceBy'];
-	    } else if (isset($_REQUEST['survey'])){
+	    } else if (isset($_REQUEST['dbname'])){
 		$text = io_readFile($queryFileName, false);
+		
 	    } else {
 		$text = 'Load a query first...';
 		$replaceBy = '';
@@ -228,7 +246,7 @@ class admin_plugin_c3sqlite extends DokuWiki_Admin_Plugin {
 	    ptln("Replacement parameters:<br><textarea name='replaceBy' cols='40' rows='1' wrap='physical' class='edit' style='width:50%; height: 100%;'>".$replaceBy."</textarea><br>");
 	    ptln("</form>");
 	    
-	    ptln(io_readFile(DOKU_PLUGIN.'query/lang/'.$conf['lang'].'/description.txt' ,false));
+	    ptln(io_readFile(DOKU_PLUGIN.'c3sqlite/lang/'.$conf['lang'].'/description.txt' ,false));
 	    ptln("<div class=\"sectionedit2\" style=\"padding-left:30px;\">".$this->getConf('forbiddenCommands').'</div>');
 
 	    ptln('</div>');
@@ -242,47 +260,47 @@ class admin_plugin_c3sqlite extends DokuWiki_Admin_Plugin {
 
 	if (!$auth) return false;
 	
- 	$surveyName = $_REQUEST['survey'];
+ 	$dbName = $_REQUEST['dbname'];
 	$text = $_REQUEST['text'];
 	
 	if(!$this->_checkQuery($text)) return;
 	
-        if (isset($_REQUEST['survey'])) {
-	    $queryName = $_REQUEST['queryname'];
-	    $surveyName = $_REQUEST['survey'];
-	    $surveyName = str_replace(' ', '', strtolower($surveyName));
-	    $result = $this->_connect($text);
+        if (isset($_REQUEST['dbname'])) {
+	    $dbName = $_REQUEST['dbname'];
+	    $dbName = str_replace(' ', '', strtolower($dbName));
+	    
+	    $DBI = plugin_load('helper', 'sqlite');
+	    if(!$DBI->init($dbName, '')) return;
+	    $res = $DBI->query("$text;");
+            if($res === false) return;
+            $result = $DBI->res2arr($res);
+	    
 	    $this->_table($result);
-	}
-        
+	}   
     }
     
     function _table($result) {
 	ptln('<br>');
 	ptln('<div class="level2"><h2>'.$this->getLang('preview').'</h2></div>');
-	ptln("<div><table class=\"inline\">");
-	ptln("<tbody><tr class=\"row0\">");
-	
-	$cols = count(pg_fetch_array($result, 0));
-	for ($i = 0; $i < $cols/2; $i++) {
-	    ptln("<th class=\"col$i\">".pg_field_name($result, $i)."</th>");
+
+	echo '<p>';
+	$ths = array_keys($result[0]);
+	echo '<div><table class="inline">';
+	echo '<tr>';
+	foreach($ths as $th) {
+	    echo '<th>'.hsc($th).'</th>';
 	}
-	ptln("</tr>");
-	$i=1;
-	while ($row = pg_fetch_row($result)) {
-	    ptln("<tr class=\"row$i\">\n");
-	    $j=0;
-	    foreach($row as $value) {
-		if (preg_match('/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}/i',$value)) {
-		    $value = '<a class="mail" title="'.$value.'" href="mailto:'.$value.'">'.$value.'</a>';
-		}
-		ptln("<td class=\"col$j\">$value </td>\n");
+	echo '</tr>';
+	foreach($result as $row) {
+	    echo '<tr>';
+	    $tds = array_values($row);
+	    foreach($tds as $td) {
+		echo '<td>'.hsc($td).'</td>';
 	    }
-	    ptln("</tr>\n");
-	    $i++;
+	    echo '</tr>';
 	}
-	
-	ptln("</tbody></table></div>");
+	echo '</table></div>';
+	echo '</p>';
     }
 	 
     function html() {
@@ -293,8 +311,6 @@ class admin_plugin_c3sqlite extends DokuWiki_Admin_Plugin {
 	if (isset($_REQUEST['fn']['test'])) {
 	    $this->_test();
 	}
-	
-	
     }
  
 }
